@@ -16,14 +16,14 @@ import scipy.interpolate
 import pandas as pd #Einlesen von EXCEL-Dateien
 import xlrd #Einlesen von EXCEL-Dateien
 import tkinter as tk #GUI, ermöglicht Fenster Dialog
-
 from tkinter import filedialog
 from nptdms import TdmsFile
-from Functions.data_count import data_count
-from Functions.data_validity_test import data_validity_test
-from Functions.data_slicing import data_slicing
-from Functions.data_read_tdms import data_read_tdms
-from Functions.data_dic_generate import data_dic_generate
+
+from functions.data_count import data_count
+from functions.data_validity_test import data_validity_test
+from functions.data_slicing import data_slicing
+from functions.data_read_tdms import data_read_tdms
+from functions.data_dic_generate import data_dic_generate
 
 def blade_evaluation(cond_comp): 
 
@@ -35,9 +35,9 @@ def blade_evaluation(cond_comp):
         
     #Speichern der relevanten channels in dic
     data_dic_tdms = {"Anregungsfrequenz": channels[0].data, 
-                     "Anregungsspannung": channels[1].data, 
-                     "Laser-Mittlere Amplitude": channels[3].data
-                     }
+                      "Anregungsspannung": channels[1].data, 
+                      "Laser-Mittlere Amplitude": channels[3].data
+                      }
     
     slicing_lim_tdms = data_slicing(channels[0].data, channels[1].data) #Ordnet die Spannungszuständen den Frequenz- und Auslenkungsverläufe zu
     

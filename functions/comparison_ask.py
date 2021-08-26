@@ -27,4 +27,4 @@ def comparison_ask():
         
     else: counter_lim = 1 #Einfache Auswertung
     
-    return (counter_lim, cond_comp)
+    return (counter_lim, test)

@@ -31,7 +31,7 @@ for counter in range(0, counter_lim): #Schleife über die zu vergleichenden Scha
     
     (data_to_compare[data_key[counter]], filename[data_key[counter]]) = blade_evaluation(cond_comp) #Holt Frequenzgang aus Auswerteskript
 
-if cond_comp == 'y':
+if cond_comp:
 
     keys_in_common = common_delta_volt(data_to_compare, data_key)
 
@@ -54,19 +54,19 @@ for zaehler in range(0, len(data_key)-1):
 
 #Normieren der Frequenzgänge
 
-if cond_comp == 'y':   
-     
+if cond_comp:   
+
     data_to_compare_norm = {}
         
     data_to_compare_norm = {str(key): {str(voltage): fg_norm(data_to_compare[key][voltage][0], data_to_compare[key][voltage][2]) for voltage in keys_in_common} for key in data_to_compare.keys()}
     #Normiert in Schleife über alle Spannungszustände und alle Schaufeln den Frequenzgang auf die Eigenfrequenz
-    
+        
     #Plot der normierten Frequenzgänge beider Schaufeln im Vergleich für jeden Spannungszustand
     for key in range(0, len(data_key)-1):
         
         for voltage in keys_in_common:
-    
-            plt.figure()
+
+            plt.figure(2)
             plt.plot(data_to_compare_norm[data_key[key]][voltage][1], data_to_compare_norm[data_key[key]][voltage][2], 'g', label =  r'%s - normiert' %(data_key[key]))
             plt.plot(data_to_compare_norm[data_key[key+1]][voltage][1], data_to_compare_norm[data_key[key+1]][voltage][2], 'r', label =  r'%s - normiert' %(data_key[key+1]))
             plt.title(str(voltage))
@@ -80,16 +80,11 @@ if cond_comp == 'y':
 
 #%% Relevante Daten zu einzelnen Schaufeln in eigene Datei schreiben
 
-# =============================================================================
-# for key in filename.keys():
-# 
-#     data_formated = write_data_lex(os.path.splitext(filename[key])[0], data_to_compare[key])
-# =============================================================================
+for key in filename.keys():
     
+    data_formated = write_data_lex(os.path.splitext(filename[key])[0], data_to_compare[key])
     
-    
-    
-    
+       
     
     
     
