@@ -16,10 +16,11 @@ import os
 #%% Read data
 
 # Asks for tdms-directory
-print('Choose .tdms-Directory.')
+print('Choose .tdms-Directory.\n')
 root = tk.Tk()
 root.withdraw()
 sub_dic = filedialog.askdirectory(title='Choose .tdms-Directory.') #Öffnet Dialogfenster zum auswählen der Datei
+print('\'{}\' was chosen.'.format(os.path.split(sub_dic)[-1]))
 
 # Empty list to store all tdms-files
 data_import = []
@@ -37,15 +38,15 @@ for (dirpath, dirs, files) in os.walk(sub_dic): #Schleife über Ordner und event
 channel_prop = data_import[0][0].properties
 channel_header = [ key for key in channel_prop.keys() ]
 
-# Constants of sweep
-sweep_len = 50000
-sensitivity = 0
-sample_freq = 10000
-resolution = sample_freq/sweep_len
-gain = 100
-
 # Sample time increment from channel properties, rounded to 7th decimal
 sampledt = round(channel_prop['wf_increment'], 7)
+
+# Constants of sweep
+sweep_len = 20000
+sample_freq = int(1/sampledt)
+resolution = sample_freq/sweep_len
+gain = 100
+sensitivity = 0
 
 '''Anregung (F) Kanal 0 '''
 
@@ -84,10 +85,12 @@ for i in range(0, num_of_files):
 set_amp = round( max( F[0] ), 1 )
 
 # Decides on sensor to evaluate depending on amplitude
+# 'L' - Laser-Sensor
 if set_amp > 1.99:
     choosesensor = 'L'
     sensitivity = 0.4 
     channel_id = 1
+# 'W' - Wirbelstrom-Sensor
 else: 
     choosesensor = 'W' 
     sensitivity = -8
@@ -142,7 +145,7 @@ HxF_abs_filt = np.empty(6, dtype=list)
 
 
 ###############################################################################
-# Loop over all files
+# Loop over all files -> Woher die ganzen statischen Variablen??
 for i in range(0, num_of_files):
     # DFFT of shortened measurements
     X_fft[i] = np.fft.rfft(X_short[i], norm = 'ortho')/(2*np.pi)
@@ -151,27 +154,56 @@ for i in range(0, num_of_files):
     # Transfer function from output/input
     HxF[i] = (X_fft[i]/F_fft[i])[0:1250]
     
+    # Filter if laser-data is used
     if choosesensor == 'L':
         HxF_abs_filt[i] = sp.sosfiltfilt(butter_HxF, np.abs(HxF[i]))
         HxF_eigval[i] = sp.find_peaks(HxF_abs_filt[i][30:1200], np.max(HxF_abs_filt[i][30:1200])*0.2, distance = 70)[0]+30
         HxF_eigval1[i] = HxF_eigval[i][0]
+    # Else if Wirbelstrom, no filtering needed
     else:
         HxF_eigval[i] = sp.find_peaks(np.abs(HxF[i][30:1200]), np.max(np.abs(HxF[i][30:1200]))*0.2, distance = 70)[0]+30
         HxF_eigval1[i] = HxF_eigval[i][0]
+    # If more then one eigenvalue, store second eigenvalue too
     if len(HxF_eigval[i]) > 1:
         HxF_eigval2[i] = HxF_eigval[i][1]
+    # Else: second eigenvalue is zero
     else:
         HxF_eigval2[i] = 0
-        
+
+# Calculate multiple k of second eigenvalue relative to first
+k = []
+
+for i in range(0, num_of_files):
+    if HxF_eigval2[i]:
+        k.append(HxF_eigval2[i]/HxF_eigval1[i])
+    else:
+        pass
+    
+print(k)
+
+
 # Loop over all files
 for i in range(0, num_of_files):
+    # To find second eigenvalue if not found before
     if HxF_eigval2[i] == 0:
+        # For laser-Sensor
         if choosesensor == 'L':
-            HxF_eigval2[i] = sp.find_peaks(np.abs(HxF_abs_filt[i][int(HxF_eigval2[5]-50):int(HxF_eigval2[5]+50)]), np.max(np.abs(HxF_abs_filt[i][int(HxF_eigval2[5]-50):int(HxF_eigval2[5]+50)]))*0.2, distance = 50)[0][0]+(HxF_eigval2[5]-50)
+            HxF_eigval2[i] = sp.find_peaks(np.abs(HxF_abs_filt[i][int(HxF_eigval2[5]-50):int(HxF_eigval2[5]+50)]),
+                                            np.max(np.abs(HxF_abs_filt[i][int(HxF_eigval2[5]-50):int(HxF_eigval2[5]+50)]))*0.2,
+                                            distance = 50)[0][0]+(HxF_eigval2[5]-50)
             HxF_eigval[i] = np.append(int(HxF_eigval[i]), int(HxF_eigval2[i]))
             HxF_eigfreq[i] = HxF_eigval[i]/(sweep_len*sampledt)
+        # For Wirbelstrom
         else:
-            HxF_eigval2[i] = sp.find_peaks(np.abs(HxF[i][int(HxF_eigval2[5]-50):int(HxF_eigval2[5]+50)]), np.max(np.abs(HxF[i][int(HxF_eigval2[5]-50):int(HxF_eigval2[5]+50)]))*0.2, distance = 50)[0][0]+(HxF_eigval2[5]-50)
+            # HxF_eigval2[i] = sp.find_peaks(np.abs(HxF[i][int(HxF_eigval2[5]-50):int(HxF_eigval2[5]+50)]),
+            #                                 np.max(np.abs(HxF[i][int(HxF_eigval2[5]-50):int(HxF_eigval2[5]+50)]))*0.2,
+            #                                 distance = 50)[0][0]+(HxF_eigval2[5]-50)
+            # HxF_eigval2[i] = sp.find_peaks(np.abs(HxF[i][int(120-50):int(120+50)]),
+            #                                 np.max(np.abs(HxF[i][int(120-50):int(120+50)]))*0.2,
+            #                                 distance = 50)[0][0]+(120-50)
+            HxF_eigval2[i] = sp.find_peaks(np.abs(HxF[i][int(120-50):int(120+50)]),
+                                np.max(np.abs(HxF[i][int(120-50):int(120+50)]))*0.2,
+                                distance = 50)[0][0]+(120-50)
             HxF_eigval[i] = np.append(int(HxF_eigval[i]), int(HxF_eigval2[i]))
             HxF_eigfreq[i] = HxF_eigval[i]/(sweep_len*sampledt)
     else:
@@ -312,7 +344,7 @@ def x_axis(y_vals, sample_freq):
 # Choose the point to be evaluated
 while True:    
     try:
-        p = int(input('Which point out of the {} points should be evaluated\n?'.format(num_of_files)))
+        p = int(input('Which point out of the {} points should be evaluated?\n'.format(num_of_files)))
         if 0 < p-1 < num_of_files :
             break
     except (ValueError, TypeError):
@@ -320,49 +352,50 @@ while True:
 
 #%% Plot 0: Excitation and measurements in point P
 
-# plot_0, ax_0 = plt.subplots(2,1)
-# plot_0.set_figwidth(12)
-# plot_0.set_figheight(8)
-# # Excitation/Stimulation
-# ax_0[0].set_ylabel('Amplitude in V')
-# ax_0[0].set_yscale("linear")
-# ax_0[0].plot(x_axis(F[0], sample_freq), F[0]*100)
-# # Measurements in P
-# ax_0[1].set_ylabel('Amplitude in mm')
-# ax_0[1].set_xlabel('Stützstelle')
-# ax_0[1].set_yscale("linear")
-# ax_0[1].plot(x_axis(X[0], sample_freq), X[0])
-# plot_0.tight_layout()
+plot_0, ax_0 = plt.subplots(2,1)
+plot_0.set_figwidth(12)
+plot_0.set_figheight(8)
+# Excitation/Stimulation
+ax_0[0].set_ylabel('Amplitude in V')
+ax_0[0].set_yscale("linear")
+ax_0[0].plot(x_axis(F[0], sample_freq), F[0]*100)
+# Measurements in P
+ax_0[1].set_ylabel('Amplitude in mm')
+ax_0[1].set_xlabel('Stützstelle')
+ax_0[1].set_yscale("linear")
+ax_0[1].plot(x_axis(X[0], sample_freq), X[0])
+plot_0.tight_layout()
 
 #%% Plot 1: Amplitude- and Phaseresponse of Transfer-Function
 
-# # Red dots: Evaluation of p
-# # Green dots: Evaluation of averaged values
+# Red dots: Evaluation of p
+# Green dots: Evaluation of averaged values
 
-# plot_1, ax_1 = plt.subplots( 2, 1, sharex=True, gridspec_kw={'height_ratios': [3,1]} )
-# plot_1.set_figwidth(12)
-# plot_1.set_figheight(8)
-# ax_1[0].set_ylabel('Amplitude in mm/100V')
-# ax_1[1].set_xlabel('Frequenz in Hz')
-# ax_1[0].set_yscale("log")
-# ax_1[0].set_title('Punktmessung' + str(p+1) + ' - Übertragungsfunktion')
-# plot_1.tight_layout()
-# ax_1[0].grid(which = 'major', axis = 'y', linewidth = 0.25, linestyle='--')
-# if len(HxF_eigval[p]) > 1: 
-#     ax_1[0].plot(fft_freq[HxF_eigval[p][0]], np.abs(HxF[p])[HxF_eigval[p][0]], 'r+', label = 'Punktmessung')
-#     ax_1[0].plot(fft_freq[HxF_eigval[p][1]], np.abs(HxF[p])[HxF_eigval[p][1]], 'r+')
-# else:
-#     ax_1[0].plot(fft_freq[HxF_eigval[p][0]], np.abs(HxF[p])[HxF_eigval[p][0]], 'r+', label = 'Punktmessung')
-# ax_1[0].plot(fft_freq[HxF_eigval1_combined], np.abs(HxF[p][HxF_eigval1_combined]), 'g*', label = 'Mittelwert')
-# ax_1[0].plot(fft_freq[HxFeigvaluecombined_2], np.abs(HxF[p][HxFeigvaluecombined_2]), 'g*')
-# ax_1[0].legend()
-# ax_1[1].set_ylabel('Phase')
-# ax_1[1].grid(which = 'major', axis = 'y', linewidth = 0.25, linestyle='--')
-# ax_1[1].set_yticks(np.arange(-180, 181, 90))
-# ax_1[1].plot(fft_freq[10:1000], np.angle(HxF[p][10:1000], deg=True))
-# ax_1[0].plot(fft_freq[10:1000], np.abs(HxF[p][10:1000]))
-# # Save plot in measurement directory
-# plt.savefig( sub_dic + str(p+1) + 'P'  + str(set_amp*100) + 'V.png', dpi = 2000)
+plot_1, ax_1 = plt.subplots( 2, 1, sharex=True, gridspec_kw={'height_ratios': [3,1]} )
+plot_1.set_figwidth(12)
+plot_1.set_figheight(8)
+ax_1[0].set_ylabel('Amplitude in mm/100V')
+ax_1[1].set_xlabel('Frequenz in Hz')
+ax_1[0].set_yscale("log")
+ax_1[0].set_title('Punktmessung' + str(p+1) + ' - Übertragungsfunktion')
+plot_1.tight_layout()
+ax_1[0].grid(which = 'major', axis = 'y', linewidth = 0.25, linestyle='--')
+if len(HxF_eigval[p]) > 1: 
+    ax_1[0].plot(fft_freq[HxF_eigval[p][0]], np.abs(HxF[p])[HxF_eigval[p][0]], 'r+', label = 'Punktmessung')
+    ax_1[0].plot(fft_freq[HxF_eigval[p][1]], np.abs(HxF[p])[HxF_eigval[p][1]], 'r+')
+else:
+    ax_1[0].plot(fft_freq[HxF_eigval[p][0]], np.abs(HxF[p])[HxF_eigval[p][0]], 'r+', label = 'Punktmessung')
+ax_1[0].plot(fft_freq[HxF_eigval1_combined], np.abs(HxF[p][HxF_eigval1_combined]), 'g*', label = 'Mittelwert')
+ax_1[0].plot(fft_freq[HxFeigvaluecombined_2], np.abs(HxF[p][HxFeigvaluecombined_2]), 'g*')
+ax_1[0].legend()
+ax_1[1].set_ylabel('Phase')
+ax_1[1].grid(which = 'major', axis = 'y', linewidth = 0.25, linestyle='--')
+ax_1[1].set_yticks(np.arange(-180, 181, 90))
+ax_1[1].plot(fft_freq[10:1000], np.angle(HxF[p][10:1000], deg=True))
+ax_1[0].plot(fft_freq[10:1000], np.abs(HxF[p][10:1000]))
+#ax_1[0].plot(fft_freq[10:1000], HxF_abs_filt[5][10:1000])
+# Save plot in measurement directory
+plt.savefig( sub_dic + str(p+1) + 'P'  + str(set_amp*100) + 'V.png', dpi = 2000)
 
 #%% Plot 2: First and second mode plotted on blade
 # ??? Punkte müssen neu vermessen werden
@@ -420,21 +453,21 @@ while True:
 
 #%% Plot 4: Excitation, Deflection and Transfer Function of one measurement point
 
-plot_4, ax_4 = plt.subplots(3,1)
-plot_4.set_figwidth(12)
-plot_4.set_figheight(8)
-ax_4[0].set_ylabel('Anregung in V')
-ax_4[1].set_ylabel('Messung in V')
-ax_4[2].set_ylabel('Komplexe Amplitude')
-ax_4[0].set_xlabel('Zeit in s')
-ax_4[1].set_xlabel('Zeit in s')
-ax_4[2].set_xlabel('Frequenz in Hz')
-ax_4[2].set_yscale('log')
-plot_4.tight_layout()
-ax_4[0].plot(np.arange(0,50000,1)/10000,F_short[p])
-ax_4[1].plot(np.arange(0,50000,1)/10000,X_short[p])
-ax_4[2].plot(fft_freq[:1250],np.abs(HxF[p][:1250]))
-#plt.savefig(sub_dic+'\Punkt '+str(p+1)+' Anregung_Messung_Übertragungsfunktion_1.svg', format = 'svg', dpi = 2000)'''
+# plot_4, ax_4 = plt.subplots(3,1)
+# plot_4.set_figwidth(12)
+# plot_4.set_figheight(8)
+# ax_4[0].set_ylabel('Anregung in V')
+# ax_4[1].set_ylabel('Messung in V')
+# ax_4[2].set_ylabel('Komplexe Amplitude')
+# ax_4[0].set_xlabel('Zeit in s')
+# ax_4[1].set_xlabel('Zeit in s')
+# ax_4[2].set_xlabel('Frequenz in Hz')
+# ax_4[2].set_yscale('log')
+# plot_4.tight_layout()
+# ax_4[0].plot(np.arange(0,50000,1)/10000,F_short[p])
+# ax_4[1].plot(np.arange(0,50000,1)/10000,X_short[p])
+# ax_4[2].plot(fft_freq[:1250],np.abs(HxF[p][:1250]))
+# #plt.savefig(sub_dic+'\Punkt '+str(p+1)+' Anregung_Messung_Übertragungsfunktion_1.svg', format = 'svg', dpi = 2000)'''
 
 #%% Plot 5: Single comparison of all Transfer Function
 '''PLOT 5: EINZELVERGLEICH ALLER ÜBERTRAGUNGSFUNKTIONEN'''
