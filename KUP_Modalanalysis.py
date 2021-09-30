@@ -44,6 +44,9 @@ for (dirpath, dirs, files) in os.walk(sub_dic): #Schleife über Ordner und event
 channel_prop = data_import[0][0].properties
 channel_header = [ key for key in channel_prop.keys() ]
 
+# Read in channel names
+channel_names = [ data_import[0][idx].name for idx in range(len(data_import[0])) ]
+
 # Sample time increment from channel properties, rounded to 7th decimal
 sampledt = round(channel_prop['wf_increment'], 7)
 
@@ -83,10 +86,13 @@ F_short = []
 # FFT of stimulation
 F_fft = []
 
+# num_of_files = 3
+
 # Loop over all files
 for file in range(0, num_of_files):
     # Get data from data_import
-    F.append( data_import[file][1]*gain/100 )
+    # F.append( data_import[file][1]*gain/100 )
+    F.append( data_import[file][channel_names.index('Input')]*gain/100 )
     # Calculate hessian
     d2Fdx2.append( np.gradient(np.gradient(F[file])) )
     
@@ -102,15 +108,22 @@ for file in range(0, num_of_files):
     peak_idx = list( filter(lambda x: data_masked[x] == 1, range(len(data_masked))) )
     # Append to list of peak indices for each file
     F_peaks.append(peak_idx)
-    
+        
     # Check if pseudo peak
     for peak_num, peak in enumerate(F_peaks[file]):        
         # Tolerance in which other potential peaks are searched and compared
-        x_tol = 3
+        x_tol = 20
+        # Minimal distance between two peaks
+        min_dist = 0.5*sweep_len
         # Check if any higher peak in tolerated x direction
         if any( abs(d2Fdx2[file][peak - x_tol:peak + x_tol]) > abs(d2Fdx2[file][peak]) ):
             # Removes pseudo peaks
             F_peaks[file].remove(peak)
+        # Check if minimal distance between peaks is violated
+        if peak_num < len(F_peaks[file])-1:
+            if np.diff(F_peaks[file])[peak_num] < min_dist:
+                # Removes pseudo peaks
+                F_peaks[file].remove(F_peaks[file][peak_num + 1])
     
     # # Plot peaks and original signal, Debugging
     # fig = plt.figure()
@@ -119,7 +132,7 @@ for file in range(0, num_of_files):
                
     # Reshape F to rows -> one sweep length and average over it
     # Shortening of stimulation signal
-    F_short.append( np.mean( F[file].reshape( ( len(F_peaks[file]), sweep_len ) ), 0 ) )
+    F_short.append( np.mean( F[file].reshape( ( int(data_size/sweep_len), sweep_len ) ), 0 ) )
     
     # FFT of stimulation for frequencies 0Hz - 250Hz
     F_fft.append( np.fft.fft(F_short[file], norm = 'ortho')[0:1250]/(np.pi) )
@@ -134,16 +147,16 @@ set_amp = round( max( F[0] ), 1 )
 # if set_amp > 1.99:
 #     choosesensor = 'L'
 #     sensitivity = 0.4 
-#     channel_id = 1
+#     channel_id = channel_names.index('Laser-Triangulation')
 # # 'W' - Wirbelstrom-Sensor
 # else: 
 #     choosesensor = 'W' 
 #     sensitivity = -8
-#     channel_id = 2
+#     channel_id = channel_names.index('Wirbelstrom')
 # =============================================================================
 # Uncomment the above when 'Wirbelstrom' is used, actually never the case
 choosesensor = 'L'
-channel_id = 2
+channel_id = channel_names.index('Laser-Triangulation')
 sensitivity = 0.4
 
 # Removing linear trend from measurements and separating data into SS and DS
@@ -161,7 +174,7 @@ for file in range(0, num_of_files):
         
     # Shortening measurements in analogy to stimulation by reshaping + averaging
     # X_short[file] = X[file][F_peaks[file]:(F_peaks[file]+sweep_len)]
-    X_short[file] = np.mean( X[file].reshape( ( len(F_peaks[file]), sweep_len ) ), 0 )
+    X_short[file] = np.mean( X[file].reshape( ( int(data_size/sweep_len), sweep_len ) ), 0 )
     
 # Butterworth-Filter for measurements
 N = 30 # Order of filter
@@ -231,9 +244,9 @@ for file in range(0, num_of_files):
     if HxF_eigval2[file] == 0:
         # For laser-Sensor
         if choosesensor == 'L':
-            HxF_eigval2[file] = sp.find_peaks(np.abs(HxF_abs_filt[file][int(HxF_eigval2[5]-50):int(HxF_eigval2[5]+50)]),
-                                            np.max(np.abs(HxF_abs_filt[file][int(HxF_eigval2[5]-50):int(HxF_eigval2[5]+50)]))*0.2,
-                                            distance = 50)[0][0]+(HxF_eigval2[5]-50)
+            HxF_eigval2[file] = sp.find_peaks(np.abs(HxF_abs_filt[file][int(np.median(HxF_eigval2)-50):int(np.median(HxF_eigval2)+50)]),
+                                            np.max(np.abs(HxF_abs_filt[file][int(np.median(HxF_eigval2)-50):int(np.median(HxF_eigval2)+50)]))*0.2,
+                                            distance = 50)[0][0]+(np.median(HxF_eigval2)-50)
             HxF_eigval[file] = np.append(int(HxF_eigval[file]), int(HxF_eigval2[file]))
             HxF_eigfreq.append( HxF_eigval[file]/(sweep_len*sampledt) )
         # For Wirbelstrom
@@ -471,46 +484,47 @@ while True:
 # ax_1[0].plot(fft_freq[10:1000], np.abs(HxF[p][10:1000]))
 # #ax_1[0].plot(fft_freq[10:1000], HxF_abs_filt[5][10:1000])
 # # Save plot in measurement directory
-# plt.savefig( sub_dic + str(p+1) + 'P'  + str(set_amp*100) + 'V.png', dpi = 2000)
+# # plt.savefig( sub_dic + str(p+1) + 'P'  + str(set_amp*100) + 'V.png', dpi = 2000)
 
 #%% Plot 2: First and second mode plotted on blade -> TO DO !!!
-# # ??? Punkte müssen neu vermessen werden
+# ??? Punkte müssen neu vermessen werden
 
-# # Green dot: selected null point
+# Green dot: selected null point
 
-# '''Punkte in [mm] ausgehend von unterer Einspannung -> Aktualisieren für 'num_of_files'!!! '''
-# p1 = [40, 12.2]
-# p2 = [60.5, 6.75]
-# p3 = [75, 0.85]
-# p4 = [75, -6.15]
-# p5 = [49, -4.2]
-# p6 = [26, -2]
+# Punkte in [mm] ausgehend von unterer Einspannung
+meas_pos = np.genfromtxt( 
+                        os.getcwd() + '/Daten_Schaufel_Motoren_Saugseite.txt',
+                        dtype=float,
+                        delimiter='\t'
+                        )
+# Read positions and correct offset
+px = 82.1 - meas_pos[:, 0]
+py = -5 + meas_pos[:, 1]
+p_ang = meas_pos[:, 2]
 
-# px = [p1[0], p2[0], p3[0], p4[0], p5[0], p6[0]]
-# py = [p1[1], p2[1], p3[1], p4[1], p5[1], p6[1]]
 
-# plot2, ay = plt.subplots(2,1)
-# imgschaufel = plt.imread('Schaufel.JPG')
-# plot2.set_figwidth(12)
-# plot2.set_figheight(8)
-# ay[0].imshow(imgschaufel, extent = [82.1,-69.9, -15.8, int(152*451/1692)-15.8])
-# ay[0].plot(0,0,'g+')
-# ay[0].plot(px,py, 'r*')
-# ay[0].set_title('Mode 1')
-# ay[1].set_xlabel('x-Koordinate in mm')
-# ay[1].set_ylabel('y-Koordinate in mm')
-# plot2.tight_layout()
-# plotscale = 10
-# for i in range(0, 6): #num_of_files):
-#     ay[0].arrow(px[i], py[i], 0, 1*plotscale*phi_1[i],width = 0.1, head_width = 1, head_length = 2, ls = '-', ec = 'b', fc = 'b')
+plot2, ay = plt.subplots(2,1)
+imgschaufel = plt.imread('Schaufel.JPG')
+plot2.set_figwidth(12)
+plot2.set_figheight(8)
+ay[0].imshow(imgschaufel, extent = [82.1,-69.9, -15.8, int(152*451/1692)-15.8])
+ay[0].plot(0,0,'g+')
+ay[0].plot(px,py, 'r*')
+ay[0].set_title('Mode 1')
+ay[1].set_xlabel('x-Koordinate in mm')
+ay[1].set_ylabel('y-Koordinate in mm')
+plot2.tight_layout()
+plotscale = 10
+for i in range(0, num_of_files):
+    ay[0].arrow(px[i], py[i], 0, 1*plotscale*phi_1[i],width = 0.1, head_width = 1, head_length = 2, ls = '-', ec = 'b', fc = 'b')
 
-# ay[1].imshow(imgschaufel, extent = [82.1,-69.9, -15.8, int(152*451/1692)-15.8])
-# ay[1].plot(0,0,'g+')
-# ay[1].plot(px,py, 'r*')
-# ay[1].set_title('Mode 2')
-# for i in range(0, 6): #num_of_files): 
-#     ay[1].arrow(px[i], py[i], 0, -1*plotscale*2*phi_2[i],width = 0.1, head_width = 1, head_length = 2, ls = '-', ec = 'b', fc = 'b')
-# #plt.savefig(sub_dic+'\Modes.png', dpi = 2000)
+ay[1].imshow(imgschaufel, extent = [82.1,-69.9, -15.8, int(152*451/1692)-15.8])
+ay[1].plot(0,0,'g+')
+ay[1].plot(px,py, 'r*')
+ay[1].set_title('Mode 2')
+for i in range(0, num_of_files): 
+    ay[1].arrow(px[i], py[i], 0, -1*plotscale*2*phi_2[i],width = 0.1, head_width = 1, head_length = 2, ls = '-', ec = 'b', fc = 'b')
+#plt.savefig(sub_dic+'\Modes.png', dpi = 2000)
 
 #%% Plot 3: Comparison Bode-Diagrams all Measurement-Points -> Check!
 
